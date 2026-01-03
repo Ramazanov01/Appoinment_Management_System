@@ -1,7 +1,71 @@
 import 'package:flutter/material.dart';
+import '../../services/storage_service.dart';
+import 'edit_profile_screen.dart';
 
-class ProfileSettingsScreen extends StatelessWidget {
+class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
+
+  @override
+  State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+}
+
+class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final userData = await StorageService.getUserData();
+      if (mounted) {
+        setState(() {
+          _userData = userData;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _navigateToEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EditProfileScreen(),
+      ),
+    );
+
+    // Reload user data if profile was updated
+    if (result == true) {
+      _loadUserData();
+    }
+  }
+
+  String _getUserName() {
+    if (_userData == null) return 'Loading...';
+    final firstName = _userData!['firstName'] ?? '';
+    final lastName = _userData!['lastName'] ?? '';
+    if (firstName.isEmpty && lastName.isEmpty) {
+      return _userData!['email'] ?? 'User';
+    }
+    return '$firstName $lastName'.trim();
+  }
+
+  String _getUserId() {
+    if (_userData == null) return '';
+    final id = _userData!['id']?.toString() ?? '';
+    return id.isNotEmpty ? '#$id' : '';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,19 +115,21 @@ class ProfileSettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 15),
                         // İsim ve ID
-                        const Column(
+                        Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Emma Wilson', // TODO: Buraya Backend'den gelen adı yazın
-                              style: TextStyle(
+                              _isLoading ? 'Loading...' : _getUserName(),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
-                              'Patient ID: #12345',
-                              style: TextStyle(
+                              _isLoading 
+                                ? 'Loading...' 
+                                : 'Patient ID: ${_getUserId()}',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey,
                               ),
@@ -83,10 +149,7 @@ class ProfileSettingsScreen extends StatelessWidget {
                     ListTile(
                       leading: const Icon(Icons.edit_outlined),
                       title: const Text('Edit Profile'),
-                      onTap: () {
-                        print('Profil Düzenle tıklandı');
-                        // TODO: Profil Düzenleme sayfasına yönlendirme
-                      },
+                      onTap: _navigateToEditProfile,
                       contentPadding: EdgeInsets.zero,
                     ),
 

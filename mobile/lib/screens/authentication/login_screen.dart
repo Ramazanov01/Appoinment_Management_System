@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'signup_screen.dart';
 import '../homepage/user_portal_screen.dart';
+import '../admin/admin_screen.dart';
+import '../manager/manager_screen.dart';
+import '../../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   //  1. Durum Değişkeni: Şifrenin gizli (true) veya açık (false) olduğunu tutar.
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   //  Önemli: Controller'ları widget yok edildiğinde temizlemeliyiz.
   @override
@@ -28,54 +32,93 @@ class _LoginScreenState extends State<LoginScreen> {
   
   Future<void> _login() async {
     // 1. Controller'lardan veriyi alın
-    final String email = _emailController.text;
+    final String email = _emailController.text.trim();
     final String password = _passwordController.text;
 
-    // Kullanıcının girdiği veriler
-    print('Giriş Yapılmaya Çalışılıyor...');
-    print('E-posta: $email');
-    print('Şifre: $password');
-
-    Navigator.pushReplacement(
-      // ⭐️ pushReplacement kullanın
-      context,
-      MaterialPageRoute(builder: (context) => const UserPortalScreen()),
-    );
-    // 2. HTTP İsteği (Backend'e Gönderme) - Örnek Kod
-    /*
-  // Bu kısım için 'http' paketini pubspec.yaml'a eklemelisiniz.
-  
-  try {
-    final response = await http.post(
-      Uri.parse('https://sizin-api-adresiniz.com/api/login'),
-      headers: <String, String>{
-        'Content-Type': 'application/json; charset=UTF-8',
-      },
-      body: jsonEncode(<String, String>{
-        'email': email,
-        'password': password,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      // Başarılı giriş: Ana sayfaya yönlendir
-      print('Giriş Başarılı!');
-      // _clearFormFields();
-    } else {
-      // Başarısız giriş: Hata mesajı göster
-      print('Giriş Başarısız! Hata Kodu: ${response.statusCode}');
-      // _clearFormFields();
+    // Validasyon
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen e-posta ve şifre alanlarını doldurun.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
-  } catch (e) {
-    print('İstek hatası: $e');
-    // _clearFormFields();
-  }
-  */
+
+    // Loading durumunu başlat
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 2. HTTP İsteği (Backend'e Gönderme)
+      final result = await ApiService.login(email, password);
+
+      if (result['success'] == true) {
+        // Başarılı giriş: Response'dan kullanıcı bilgilerini al
+        final userData = result['data']['user'];
+        final String userRole = userData['role']?.toString().toLowerCase() ?? 'user';
+        
+        print('Giriş Başarılı! Kullanıcı Rolü: $userRole');
+
+        // Rolüne göre yönlendirme
+        Widget targetScreen;
+        if (userRole == 'admin') {
+          targetScreen = const AdminScreen();
+        } else if (userRole == 'manager') {
+          targetScreen = const ManagerDashboardScreen();
+        } else {
+          // Default olarak user portal'a yönlendir
+          targetScreen = const UserPortalScreen();
+        }
+
+        // Formu temizle
+        _clearFormFields();
+
+        // Yönlendirme yap
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => targetScreen),
+          );
+        }
+      } else {
+        // Başarısız giriş: Hata mesajı göster
+        final String errorMessage = result['message'] ?? 'Giriş başarısız!';
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // İstek hatası
+      print('İstek hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bağlantı hatası. Lütfen tekrar deneyin.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      // Loading durumunu bitir
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _clearFormFields() {
-    // setState kullanmaya gerek yok, çünkü controller'lar metodu çağırdığında
-    // Flutter ilgili TextFormField'u otomatik olarak günceller.
+        // Flutter ilgili TextFormField'u otomatik olarak günceller.
     _emailController.clear();
     _passwordController.clear();
   }
@@ -174,16 +217,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              //onPressed: _login,
-              onPressed: () {
-                // ⭐️ 1. İşlem: Giriş (Login) işlemini başlat
-                _login();
-
-                // ⭐️ 2. İşlem: Formu temizle (login fonksiyonu içinde yapılması daha temizdir,
-                //             ama test için buraya ekleyebiliriz)
-                _clearFormFields();
-              },
-              child: const Text('Giriş Yap', style: TextStyle(fontSize: 18)),
+              onPressed: _isLoading ? null : _login,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Giriş Yap', style: TextStyle(fontSize: 18)),
             ),
 
             const SizedBox(height: 30),
@@ -206,27 +250,27 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 30),
 
             // 6. Google ile Giriş
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                side: BorderSide(color: Colors.grey.shade400),
-              ),
-              onPressed: () {
-                /* TODO: Google ile Giriş Mantığı buraya eklenecek */
-                //print('Google ile Giriş Tıklandı');
-              },
-              icon: Image.asset(
-                'assets/google_logo.png', // Buraya kendi Google logo resminizi ekleyin
-                height: 24,
-              ),
-              label: const Text(
-                'Google ile Devam Et',
-                style: TextStyle(fontSize: 16, color: Colors.black87),
-              ),
-            ),
+            // OutlinedButton.icon(
+            //   style: OutlinedButton.styleFrom(
+            //     padding: const EdgeInsets.symmetric(vertical: 16),
+            //     shape: RoundedRectangleBorder(
+            //       borderRadius: BorderRadius.circular(8),
+            //     ),
+            //     side: BorderSide(color: Colors.grey.shade400),
+            //   ),
+            //   onPressed: () {
+            //     /* TODO: Google ile Giriş Mantığı buraya eklenecek */
+            //     //print('Google ile Giriş Tıklandı');
+            //   },
+            //   icon: Image.asset(
+            //     'assets/google_logo.png', // Buraya kendi Google logo resminizi ekleyin
+            //     height: 24,
+            //   ),
+            //   label: const Text(
+            //     'Google ile Devam Et',
+            //     style: TextStyle(fontSize: 16, color: Colors.black87),
+            //   ),
+            // ),
 
             const SizedBox(height: 80),
 

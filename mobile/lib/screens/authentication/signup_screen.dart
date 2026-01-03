@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// Import'larınızı kontrol edin. Eğer diğer dosyalardan birine yönlendirme yapılacaksa,
-// ilgili import'ları eklemelisiniz (örneğin LoginScreen).
+import '../../services/api_service.dart';
+import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -12,7 +11,7 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  // ⭐️ 1. Controller'lar: Formdaki tüm girdileri yönetmek için
+  // 1. Controller'lar: Formdaki tüm girdileri yönetmek için
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _surnameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -37,53 +36,79 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  void _signUp() {
+  bool _isLoading = false;
+
+  Future<void> _signUp() async {
     // 1. Tüm form alanlarının geçerli (valid) olup olmadığını kontrol eder
     if (_formKey.currentState!.validate()) {
       // Eğer geçerliyse, formdaki verileri controller'lardan çek
-      final name = _nameController.text;
-      final surname = _surnameController.text;
-      final email = _emailController.text;
+      final firstName = _nameController.text.trim();
+      final lastName = _surnameController.text.trim();
+      final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      // ⭐️ 2. Verileri terminalde göster (Başarılı veri toplama)
-      print('✅ Form Doğrulandı!');
-      print('-----------------------------------------');
-      print('Adı: $name');
-      print('Soyadı: $surname');
-      print('E-posta: $email');
-      print('Şifre: $password (Gizlendi)');
-      print('-----------------------------------------');
+      // Loading durumunu başlat
+      setState(() {
+        _isLoading = true;
+      });
 
-      // ⭐️ 3. Backend'e Gönderme (HTTP İsteği) KISMI YORUMA ALINMIŞTIR!
+      try {
+        // Backend'e Gönderme (HTTP İsteği)
+        final result = await ApiService.signup(firstName, lastName, email, password);
 
-      /* try {
-      final response = await http.post(
-        Uri.parse('https://sizin-kayit-api-adresiniz.com/api/signup'),
-        headers: <String, String>{
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-        body: jsonEncode(<String, String>{
-          'name': name,
-          'surname': surname,
-          'email': email,
-          'password': password,
-        }),
-      );
-
-      if (response.statusCode == 201) { // 201 Created (Başarılı Kayıt)
-        print('Kayıt Başarılı!');
-        // TODO: Başarılı Kayıt sonrası Login ekranına yönlendirme
-      } else {
-        print('Kayıt Başarısız! Hata Kodu: ${response.statusCode}');
+        if (result['success'] == true) {
+          // Başarılı kayıt
+          print('✅ Kayıt Başarılı!');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kayıt başarılı! Giriş yapabilirsiniz.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            
+            // Formu temizle
+            _clearFormFields();
+            
+            // Login ekranına yönlendir
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          }
+        } else {
+          // Başarısız kayıt
+          final String errorMessage = result['message'] ?? 'Kayıt başarısız!';
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        // İstek hatası
+        print('İstek hatası: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bağlantı hatası. Lütfen tekrar deneyin.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        // Loading durumunu bitir
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
-    } catch (e) {
-      print('İstek hatası veya bağlantı sorunu: $e');
-    }
-    */
-
-      // İşlem (simülasyon) bittikten sonra formu temizle
-      _clearFormFields();
     } else {
       // Doğrulama başarısız olursa
       print('❌ Formda hatalar var. Lütfen gerekli alanları doldurun.');
@@ -260,12 +285,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: () {
-                  _signUp();
-                  Navigator.pop(context);
-
-                }, // Kayıt ol fonksiyonu
-                child: const Text('Kayıt Ol', style: TextStyle(fontSize: 18)),
+                onPressed: _isLoading ? null : _signUp,
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text('Kayıt Ol', style: TextStyle(fontSize: 18)),
               ),
 
               const SizedBox(height: 80),
